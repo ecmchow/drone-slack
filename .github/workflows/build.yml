@@ -2,6 +2,11 @@ name: build
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Build tag version'
+        required: false
+        default: 'latest'
 
 jobs:
   test:
@@ -65,7 +70,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: test
     strategy:
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         os: [windows-2019, windows-2022]
         include:
@@ -136,3 +141,32 @@ jobs:
       - name: Docker Push
         run: |
           docker manifest push ecmchow/drone-slack:latest
+
+      - name: Docker Manifest (Custom Tag)
+        if: github.event.inputs.tag != 'latest'
+        run: |
+          docker manifest create ecmchow/drone-slack:${{ github.event.inputs.tag }} \
+            --amend ecmchow/drone-slack:linux-amd64 \
+            --amend ecmchow/drone-slack:linux-arm64 \
+            --amend ecmchow/drone-slack:windows-1809-amd64 \
+            --amend ecmchow/drone-slack:windows-ltsc2022-amd64
+
+      - name: Docker Annotate (Custom Tag)
+        if: github.event.inputs.tag != 'latest'
+        run: |
+          docker manifest annotate --os linux --arch amd64 \
+            ecmchow/drone-slack:${{ github.event.inputs.tag }} ecmchow/drone-slack:linux-amd64
+         
+          docker manifest annotate --os linux --arch arm64 \
+            ecmchow/drone-slack:${{ github.event.inputs.tag }} ecmchow/drone-slack:linux-arm64
+    
+          docker manifest annotate --os windows --arch amd64 --os-version "1809" \
+            ecmchow/drone-slack:${{ github.event.inputs.tag }} ecmchow/drone-slack:windows-1809-amd64
+
+          docker manifest annotate --os windows --arch amd64 --os-version "ltsc2022" \
+            ecmchow/drone-slack:${{ github.event.inputs.tag }} ecmchow/drone-slack:windows-ltsc2022-amd64
+
+      - name: Docker Push (Custom Tag)
+        if: github.event.inputs.tag != 'latest'
+        run: |
+          docker manifest push ecmchow/drone-slack:${{ github.event.inputs.tag }}
