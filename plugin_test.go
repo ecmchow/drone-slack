@@ -74,9 +74,10 @@ func TestNewCommitMessage(t *testing.T) {
 func TestDefaultMessage(t *testing.T) {
 	repo := getTestRepo()
 	build := getTestBuild()
+	config := getTestConfig()
 
-	msg := message(repo, build)
-	expectedMessage := "*success* <http://github.com/octocat/hello-world|octocat/hello-world#7fd1a60b> (master) by octocat"
+	msg := message(repo, build, config)
+	expectedMessage := "*:white_check_mark: Push SUCCESS*\nRepo: `octocat/hello-world` (master)\nBuild #1 (7fd1a60b) by octocat\n<http://github.com/octocat/hello-world|Drone CI>"
 
 	assert.Equal(t, expectedMessage, msg)
 }
@@ -178,7 +179,9 @@ func getTestConfig() Config {
 {{build.status}}`
 
 	return Config{
-		Template: t,
-		Fallback: tf,
+		Template:     t,
+		Fallback:     tf,
+		HostInternal: "",
+		HostExternal: "",
 	}
 }

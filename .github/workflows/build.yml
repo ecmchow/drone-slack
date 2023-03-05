@@ -1,0 +1,138 @@
+name: build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/custom'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+
+      - name: Test
+        run: go test -cover ./...
+
+  build-linux:
+    name: Build Linux Images
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      max-parallel: 2
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            file: docker/Dockerfile.linux.amd64
+          - arch: arm64
+            file: docker/Dockerfile.linux.arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: v0.9.1
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ecmchow/drone-slack:linux-${{ matrix.arch }}
+
+  build-windows:
+    name: Build Windows Images
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      max-parallel: 2
+      matrix:
+        os: [windows-2019, windows-2022]
+        include:
+          - os: windows-2019
+            base: nanoserver-1809
+            file: docker/Dockerfile.windows.1809
+            tag: ecmchow/drone-slack:windows-1809-amd64
+          - os: windows-2022
+            base: nanoserver-ltsc2022
+            file: docker/Dockerfile.windows.ltsc2022
+            tag: ecmchow/drone-slack:windows-ltsc2022-amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Build
+        run: |
+          docker build -f ${{ matrix.file }} --build-arg BASE=${{ matrix.base }} -t ${{ matrix.tag }} .
+
+      - name: Docker Push
+        run: |
+          docker push ${{ matrix.tag }}
+
+  publish-manfiest:
+    name: Publish Manifest
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux
+      - build-windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Manifest
+        run: |
+          docker manifest create ecmchow/drone-slack:latest \
+            --amend ecmchow/drone-slack:linux-amd64 \
+            --amend ecmchow/drone-slack:linux-arm64 \
+            --amend ecmchow/drone-slack:windows-1809-amd64 \
+            --amend ecmchow/drone-slack:windows-ltsc2022-amd64
+    
+      - name: Docker Annotate
+        run: |
+          docker manifest annotate --os linux --arch amd64 \
+            ecmchow/drone-slack:latest ecmchow/drone-slack:linux-amd64
+         
+          docker manifest annotate --os linux --arch arm64 \
+            ecmchow/drone-slack:latest ecmchow/drone-slack:linux-arm64
+    
+          docker manifest annotate --os windows --arch amd64 --os-version "1809" \
+            ecmchow/drone-slack:latest ecmchow/drone-slack:windows-1809-amd64
+
+          docker manifest annotate --os windows --arch amd64 --os-version "ltsc2022" \
+            ecmchow/drone-slack:latest ecmchow/drone-slack:windows-ltsc2022-amd64
+
+      - name: Docker Push
+        run: |
+          docker manifest push ecmchow/drone-slack:latest

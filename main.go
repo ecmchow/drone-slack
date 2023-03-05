@@ -78,6 +78,16 @@ func main() {
 			EnvVar: "PLUGIN_ICON_EMOJI",
 		},
 		cli.StringFlag{
+			Name:   "host.internal",
+			Usage:  "drone server internal host",
+			EnvVar: "DRONE_HOST_INTERNAL",
+		},
+		cli.StringFlag{
+			Name:   "host.external",
+			Usage:  "drone server external host",
+			EnvVar: "DRONE_HOST_EXTERNAL",
+		},
+		cli.StringFlag{
 			Name:   "repo.owner",
 			Usage:  "repository owner",
 			EnvVar: "DRONE_REPO_OWNER",
@@ -86,6 +96,21 @@ func main() {
 			Name:   "repo.name",
 			Usage:  "repository name",
 			EnvVar: "DRONE_REPO_NAME",
+		},
+		cli.StringFlag{
+			Name:   "repo.link",
+			Usage:  "repository link",
+			EnvVar: "DRONE_REPO_LINK",
+		},
+		cli.StringFlag{
+			Name:   "repo.hostInternal",
+			Usage:  "repository internal host",
+			EnvVar: "DRONE_REPO_HOST_INTERNAL",
+		},
+		cli.StringFlag{
+			Name:   "repo.hostExternal",
+			Usage:  "repository external host",
+			EnvVar: "DRONE_REPO_HOST_EXTERNAL",
 		},
 		cli.StringFlag{
 			Name:   "commit.sha",
@@ -201,8 +226,11 @@ func main() {
 func run(c *cli.Context) error {
 	plugin := Plugin{
 		Repo: Repo{
-			Owner: c.String("repo.owner"),
-			Name:  c.String("repo.name"),
+			Owner:        c.String("repo.owner"),
+			Name:         c.String("repo.name"),
+			Link:         c.String("repo.link"),
+			HostInternal: c.String("repo.hostInternal"),
+			HostExternal: c.String("repo.hostExternal"),
 		},
 		Build: Build{
 			Tag:    c.String("build.tag"),
@@ -230,17 +258,19 @@ func run(c *cli.Context) error {
 			Started: c.Int64("job.started"),
 		},
 		Config: Config{
-			Webhook:   c.String("webhook"),
-			Channel:   c.String("channel"),
-			Recipient: c.String("recipient"),
-			Username:  c.String("username"),
-			Template:  c.String("template"),
-			Fallback:  c.String("fallback"),
-			ImageURL:  c.String("image"),
-			IconURL:   c.String("icon.url"),
-			IconEmoji: c.String("icon.emoji"),
-			Color:     c.String("color"),
-			LinkNames: c.Bool("link-names"),
+			Webhook:      c.String("webhook"),
+			Channel:      c.String("channel"),
+			Recipient:    c.String("recipient"),
+			Username:     c.String("username"),
+			Template:     c.String("template"),
+			Fallback:     c.String("fallback"),
+			ImageURL:     c.String("image"),
+			IconURL:      c.String("icon.url"),
+			IconEmoji:    c.String("icon.emoji"),
+			HostInternal: c.String("host.internal"),
+			HostExternal: c.String("host.external"),
+			Color:        c.String("color"),
+			LinkNames:    c.Bool("link-names"),
 		},
 	}
 	if plugin.Build.Commit == "" {

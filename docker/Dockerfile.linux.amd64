@@ -1,3 +1,15 @@
+# syntax=docker/dockerfile:1
+
+# Build executable
+FROM golang:1.19 AS builder
+WORKDIR /app
+COPY go.mod ./
+COPY go.sum ./
+COPY *.go ./
+ENV CGO_ENABLED=0
+RUN go build -v -ldflags "-X main.version=" -a -tags netgo -o ./release/linux/amd64/drone-slack .
+
+# Runner image
 FROM plugins/base:multiarch
 
 LABEL maintainer="Drone.IO Community <drone-dev@googlegroups.com>" \
@@ -5,5 +17,5 @@ LABEL maintainer="Drone.IO Community <drone-dev@googlegroups.com>" \
   org.label-schema.vendor="Drone.IO Community" \
   org.label-schema.schema-version="1.0"
 
-ADD release/linux/amd64/drone-slack /bin/
+COPY --from=builder /app/release/linux/amd64/drone-slack /bin/
 ENTRYPOINT ["/bin/drone-slack"]

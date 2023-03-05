@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/bluele/slack"
@@ -10,8 +11,11 @@ import (
 
 type (
 	Repo struct {
-		Owner string
-		Name  string
+		Owner        string
+		Name         string
+		Link         string
+		HostInternal string
+		HostExternal string
 	}
 
 	Build struct {
@@ -46,17 +50,19 @@ type (
 	}
 
 	Config struct {
-		Webhook   string
-		Channel   string
-		Recipient string
-		Username  string
-		Template  string
-		Fallback  string
-		ImageURL  string
-		IconURL   string
-		IconEmoji string
-		Color     string
-		LinkNames bool
+		Webhook      string
+		Channel      string
+		Recipient    string
+		Username     string
+		Template     string
+		Fallback     string
+		ImageURL     string
+		IconURL      string
+		IconEmoji    string
+		HostInternal string
+		HostExternal string
+		Color        string
+		LinkNames    bool
 	}
 
 	Job struct {
@@ -131,7 +137,7 @@ func (p Plugin) Exec() error {
 			return err
 		}
 	} else {
-		attachment.Text = message(p.Repo, p.Build)
+		attachment.Text = message(p.Repo, p.Build, p.Config)
 	}
 
 	client := slack.NewWebHook(p.Config.Webhook)
@@ -142,15 +148,41 @@ func templateMessage(t string, plugin Plugin) (string, error) {
 	return template.RenderTrim(t, plugin)
 }
 
-func message(repo Repo, build Build) string {
-	return fmt.Sprintf("*%s* <%s|%s/%s#%s> (%s) by %s",
-		build.Status,
-		build.Link,
-		repo.Owner,
-		repo.Name,
-		build.Commit[:8],
-		build.Branch,
-		build.Author,
+func message(repo Repo, build Build, config Config) string {
+	statusIcon := icon(build)
+	msgTitle := fmt.Sprintf("*%s %s %s*", statusIcon, strings.Title(build.Event), strings.ToUpper(build.Status))
+	msgRepo := fmt.Sprintf("Repo: `%s/%s` (%s)", repo.Owner, repo.Name, build.Branch)
+	msgBuild := fmt.Sprintf("Build #%d (%s) by %s", build.Number, build.Commit[:8], build.Author)
+	msgFooter := fmt.Sprintf("<%s|Drone CI>", build.Link)
+
+	if build.Event == "promote" && build.DeployTo != "" {
+		msgTitle = fmt.Sprintf("*%s %s Deploy %s*", statusIcon, strings.Title(build.DeployTo), strings.ToUpper(build.Status))
+	} else if build.DeployTo != "" {
+		msgTitle = fmt.Sprintf("*%s %s %s %s*", statusIcon, strings.Title(build.DeployTo), strings.Title(build.Event), strings.ToUpper(build.Status))
+	}
+
+	if config.HostInternal != "" && config.HostExternal != "" {
+		urlInternal := ""
+		urlExternal := ""
+
+		url, err := url.Parse(build.Link)
+		if err != nil {
+			urlInternal = build.Link
+			urlExternal = build.Link
+		} else {
+			urlInternal = strings.Replace(build.Link, url.Hostname(), config.HostInternal, 1)
+			urlExternal = strings.Replace(build.Link, url.Hostname(), config.HostExternal, 1)
+		}
+
+		msgFooter = fmt.Sprintf("<%s|Drone CI> (<%s|External>)", urlInternal, urlExternal)
+	}
+
+	return fmt.Sprintf(
+		"%s\n%s\n%s\n%s",
+		msgTitle,
+		msgRepo,
+		msgBuild,
+		msgFooter,
 	)
 }
 
@@ -173,6 +205,17 @@ func color(build Build) string {
 		return "danger"
 	default:
 		return "warning"
+	}
+}
+
+func icon(build Build) string {
+	switch build.Status {
+	case "success":
+		return ":white_check_mark:"
+	case "failure", "error", "killed":
+		return ":x:"
+	default:
+		return ":warning:"
 	}
 }
 
